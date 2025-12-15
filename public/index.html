@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefiTheOdds Backtester Showcase</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0a0a0a; color: #f3f4f6; font-family: 'Inter', sans-serif; }
+        .card { background-color: #1f2937; border-color: #374151; }
+        .strategy-item { transition: all 0.15s ease; cursor: pointer; }
+        .strategy-item:hover { background-color: #374151; }
+        .strategy-item.selected { border-left: 4px solid #06b6d4; background-color: #374151; font-weight: 600; }
+        /* Custom spinner for loading state */
+        .spinner {
+            border-top-color: #06b6d4;
+            border-left-color: #06b6d4;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-cyan-400 mb-2">Algorithmic Backtester Showcase</h1>
+        <p class="text-gray-400 mb-8">
+            Test trading strategies using enriched data from the DefiTheOdds API. Reports stored in browser local storage.
+        </p>
+
+        <!-- Main Layout Grid -->
+        <div class="grid lg:grid-cols-3 gap-8">
+            
+            <!-- Column 1: Configuration -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Data Selection Card -->
+                <div class="card p-6 rounded-xl border">
+                    <h2 class="text-2xl font-semibold text-gray-200 mb-4">1. Select Data</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label for="tickerSelect" class="block text-sm font-medium text-gray-400 mb-1">Crypto Ticker</label>
+                            <select id="tickerSelect" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2"></select>
+                        </div>
+                        <div>
+                            <label for="timeframeSelect" class="block text-sm font-medium text-gray-400 mb-1">Timeframe</label>
+                            <select id="timeframeSelect" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2"></select>
+                        </div>
+                        
+                        <!-- NEW CANDLE COUNT INPUT -->
+                        <div>
+                            <label for="candleCountInput" class="block text-sm font-medium text-gray-400 mb-1">
+                                Candles to Test (Max: <span id="maxCandles">100</span>)
+                            </label>
+                            <input type="number" id="candleCountInput" value="100" min="1" max="100" step="1" 
+                                class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2">
+                        </div>
+                        
+                        <p class="text-xs text-gray-500">The total number of historical candles to fetch and analyze.</p>
+                    </div>
+                </div>
+
+                <!-- Strategy Selection Card -->
+                <div class="card p-6 rounded-xl border">
+                    <h2 class="text-2xl font-semibold text-gray-200 mb-4">2. Choose Strategy</h2>
+                    <ul id="strategyList" class="space-y-1">
+                        <!-- Strategy items will be populated here -->
+                    </ul>
+                </div>
+
+                <!-- Strategy Configuration Card (Dynamic) -->
+                <div class="card p-6 rounded-xl border" id="configCard" style="display: none;">
+                    <h2 class="text-2xl font-semibold text-cyan-400 mb-4" id="configTitle"></h2>
+                    <p class="text-sm text-gray-400 mb-4" id="configDescription"></p>
+                    <div id="configParams" class="space-y-4">
+                        <!-- Parameters generated here -->
+                    </div>
+                    <button id="runTestButton" class="w-full mt-6 bg-cyan-600 text-white font-bold py-2 rounded-lg hover:bg-cyan-500 transition disabled:bg-gray-600 flex items-center justify-center" disabled>
+                        <span id="buttonText">Run Backtest</span>
+                        <div id="loadingSpinner" class="spinner w-5 h-5 border-4 border-gray-400 border-solid rounded-full hidden ml-2"></div>
+                    </button>
+                </div>
+                
+                <!-- Past Results Link -->
+                <button id="viewHistoryButton" class="w-full text-center py-2 text-cyan-400 hover:text-cyan-300 transition">
+                    View Past Backtests
+                </button>
+            </div>
+
+            <!-- Column 2: Results & Report -->
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- Report Card (Default) -->
+                <div class="card p-6 rounded-xl border min-h-[600px]" id="reportContainer">
+                    <h2 class="text-2xl font-semibold text-gray-200 mb-4" id="reportTitle">Backtest Report</h2>
+                    <div id="reportContent" class="space-y-6">
+                        <p class="text-gray-500">Select a crypto, a timeframe, and a strategy, then click 'Run Backtest' to generate a report.</p>
+                    </div>
+                </div>
+                
+                <!-- History Card -->
+                <div class="card p-6 rounded-xl border min-h-[400px] hidden" id="historyContainer">
+                    <h2 class="text-2xl font-semibold text-gray-200 mb-4">Backtest History (<span id="historyCount">0</span>)</h2>
+                    <div id="historyList" class="space-y-4">
+                        <p class="text-gray-500">Loading past reports...</p>
+                    </div>
+                    <button id="clearHistoryButton" class="mt-4 text-red-400 hover:text-red-300 text-sm" style="display: none;">
+                        Clear All History
+                    </button>
+                    <button id="backToReportButton" class="mt-4 bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-500 transition text-sm">
+                        Back to Test
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main JavaScript Logic -->
+    <script>
+        // --- Configuration Constants ---
+        const LOCAL_STORAGE_KEY = 'dfo_backtest_history';
+        
+        const TICKERS = ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "ADA-USD", "XRP-USD", "DOT-USD", "DOGE-USD", "AVAX-USD", "LINK-USD"];
+        // Defined max candles for validation based on API limits
+        const TIMEFRAMES = [
+            { key: "daily", label: "DAILY", maxCandles: 3000, defaultCandles: 100 }, // Updated maxCandles to 3000
+            { key: "hourly", label: "HOURLY", maxCandles: 2000, defaultCandles: 100 } // Updated maxCandles to 2000
+        ];
+
+        const STRATEGIES = [
+            { 
+                id: 'LULD', 
+                title: 'Limit-Up, Limit Down', 
+                description: 'Buys on a sharp dip from the previous close and sells on a fixed percentage pump from the entry price.',
+                params: [
+                    { name: 'dipThreshold', label: 'Dip Threshold (%)', type: 'number', default: 5, step: 0.1 },
+                    { name: 'pumpThreshold', label: 'Pump Threshold (%)', type: 'number', default: 5, step: 0.1 }
+                ] 
+            },
+            { 
+                id: 'SMAC', 
+                title: 'SMA Crossover', 
+                description: 'Buys when the Short Moving Average crosses above the Long Moving Average, and sells when it crosses below.',
+                params: [
+                    { name: 'shortPeriod', label: 'Short SMA Period', type: 'number', default: 50, step: 1 },
+                    { name: 'longPeriod', label: 'Long SMA Period', type: 'number', default: 200, step: 1 }
+                ] 
+            },
+            { 
+                id: 'RSIBB', 
+                title: 'RSI Overbought/Oversold', 
+                description: 'Buys when RSI drops below the oversold threshold and sells when it exceeds the overbought threshold.',
+                params: [
+                    { name: 'oversold', label: 'Oversold RSI', type: 'number', default: 30, step: 1 },
+                    { name: 'overbought', label: 'Overbought RSI', type: 'number', default: 70, step: 1 }
+                ] 
+            },
+            // NEW STRATEGY 4: HFTL (Candle Shape Based)
+            { 
+                id: 'HFTL', 
+                title: 'Hammer/Shooting Star Entry', 
+                description: 'Buys if a bullish Hammer or Inverted Hammer is detected on the previous candle. Sells on a bearish Shooting Star or Hanging Man.',
+                params: [] // No parameters needed
+            },
+            // NEW STRATEGY 5: ADX Momentum Breakout
+            { 
+                id: 'ADXMB', 
+                title: 'ADX Momentum Breakout', 
+                description: 'Buys when trend strength (ADX) is confirmed and Positive Directional Movement (+DMP) is dominant (crosses -DMN).',
+                params: [
+                    { name: 'adxThreshold', label: 'ADX Trend Threshold', type: 'number', default: 25, step: 1 }
+                ] 
+            },
+            // NEW STRATEGY 6: VWAP Reversion
+            { 
+                id: 'VWAPR', 
+                title: 'VWAP Mean Reversion (ATR)', 
+                description: 'Buys if the price closes significantly below VWAP (measured by ATR volatility) and sells when it reverts back to VWAP.',
+                params: [
+                    { name: 'atrMultiplier', label: 'ATR Multiplier (Buy Below)', type: 'number', default: 2.0, step: 0.1 }
+                ] 
+            }
+        ];
+
+        // --- Global State ---
+        let selectedStrategy = null;
+        let apiData = [];
+
+        // --- DOM Elements ---
+        const tickerSelect = document.getElementById('tickerSelect');
+        const timeframeSelect = document.getElementById('timeframeSelect');
+        const candleCountInput = document.getElementById('candleCountInput');
+        const maxCandlesEl = document.getElementById('maxCandles');
+        const strategyListEl = document.getElementById('strategyList');
+        const configCard = document.getElementById('configCard');
+        const configTitle = document.getElementById('configTitle');
+        const configDescription = document.getElementById('configDescription');
+        const configParams = document.getElementById('configParams');
+        const runTestButton = document.getElementById('runTestButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const reportContainer = document.getElementById('reportContainer');
+        const historyContainer = document.getElementById('historyContainer');
+        const historyListEl = document.getElementById('historyList');
+        const historyCountEl = document.getElementById('historyCount');
+        const viewHistoryButton = document.getElementById('viewHistoryButton');
+        const backToReportButton = document.getElementById('backToReportButton');
+
+        // --- Utility Functions ---
+        
+        // Helper function to generate a styled pill (badge)
+        function getPill(text, isPositive, secondary = false) {
+            let bg, text_color;
+            if (isPositive) {
+                bg = secondary ? 'bg-indigo-700' : 'bg-green-700';
+                text_color = secondary ? 'text-indigo-200' : 'text-green-200';
+            } else {
+                bg = secondary ? 'bg-yellow-700' : 'bg-red-700';
+                text_color = secondary ? 'text-yellow-200' : 'text-red-200';
+            }
+            return `<span class="${bg} ${text_color} px-2 py-0.5 rounded-full inline-block text-xs font-bold">${text}</span>`;
+        }
+
+        function updateCandleInput() {
+            const selectedKey = timeframeSelect.value;
+            const tf = TIMEFRAMES.find(t => t.key === selectedKey);
+            
+            if (tf) {
+                maxCandlesEl.textContent = tf.maxCandles;
+                candleCountInput.max = tf.maxCandles;
+                // Clamp current value if it exceeds max
+                let currentValue = parseInt(candleCountInput.value);
+                if (currentValue > tf.maxCandles || isNaN(currentValue)) {
+                    candleCountInput.value = tf.defaultCandles;
+                }
+            }
+        }
+
+        function populateSelectors() {
+            TICKERS.forEach(ticker => {
+                tickerSelect.add(new Option(ticker, ticker));
+            });
+            TIMEFRAMES.forEach(tf => {
+                timeframeSelect.add(new Option(tf.label, tf.key));
+            });
+            
+            // Initial setup
+            updateCandleInput();
+            
+            // Add listeners for dynamic changes
+            timeframeSelect.addEventListener('change', updateCandleInput);
+        }
+
+        function populateStrategyList() {
+            strategyListEl.innerHTML = STRATEGIES.map(s => `
+                <li id="strategy-${s.id}" class="strategy-item p-3 rounded-lg border border-gray-700 space-y-1" data-id="${s.id}">
+                    <h4 class="text-white">${s.title}</h4>
+                    <p class="text-xs text-gray-400">${s.description}</p>
+                </li>
+            `).join('');
+
+            document.querySelectorAll('.strategy-item').forEach(el => {
+                el.addEventListener('click', () => selectStrategy(el.dataset.id));
+            });
+        }
+
+        function selectStrategy(id) {
+            document.querySelectorAll('.strategy-item').forEach(el => el.classList.remove('selected'));
+            const element = document.getElementById(`strategy-${id}`);
+            if (!element) return;
+            element.classList.add('selected');
+            
+            selectedStrategy = STRATEGIES.find(s => s.id === id);
+            renderConfigCard();
+        }
+
+        function renderConfigCard() {
+            if (!selectedStrategy) {
+                configCard.style.display = 'none';
+                return;
+            }
+
+            configTitle.textContent = `Configure: ${selectedStrategy.title}`;
+            configDescription.textContent = selectedStrategy.description;
+            configParams.innerHTML = selectedStrategy.params.map(p => `
+                <div>
+                    <label for="${p.name}" class="block text-sm font-medium text-gray-400 mb-1">${p.label}</label>
+                    <input type="${p.type}" id="${p.name}" value="${p.default}" step="${p.step}" 
+                           class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2">
+                </div>
+            `).join('');
+
+            configCard.style.display = 'block';
+            runTestButton.disabled = false;
+        }
+
+        function setLoading(isLoading) {
+            runTestButton.disabled = isLoading;
+            buttonText.textContent = isLoading ? 'Running Test...' : 'Run Backtest';
+            loadingSpinner.classList.toggle('hidden', !isLoading);
+        }
+
+        // --- LocalStorage Operations ---
+
+        function getReports() {
+            const reportsJson = localStorage.getItem(LOCAL_STORAGE_KEY);
+            try {
+                return reportsJson ? JSON.parse(reportsJson) : [];
+            } catch (e) {
+                console.error("Error parsing local storage reports:", e);
+                localStorage.removeItem(LOCAL_STORAGE_KEY); // Clear corrupted data
+                return [];
+            }
+        }
+
+        function saveReport(config, report) {
+            const history = getReports();
+            
+            // Generate a simple unique ID for this report
+            const newReport = {
+                id: Date.now().toString(36) + Math.random().toString(36).substring(2, 5),
+                timestamp: new Date().toISOString(),
+                config: config,
+                report: report,
+                ticker: config.ticker,
+                timeframe: config.timeframe,
+                candles: config.candles
+            };
+
+            history.push(newReport);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(history));
+            console.log("Report saved to localStorage.");
+        }
+
+        function loadHistory() {
+            historyListEl.innerHTML = '<p class="text-cyan-400 text-center">Loading...</p>';
+            
+            try {
+                const history = getReports();
+                history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
+
+                historyCountEl.textContent = history.length;
+                
+                historyListEl.innerHTML = history.length > 0 ? history.map(item => `
+                    <div class="p-3 border border-gray-700 rounded-lg bg-gray-800 space-y-1">
+                        <p class="text-lg font-semibold text-white">${item.config.ticker} - ${item.config.timeframe.toUpperCase()} (${item.config.strategyTitle})</p>
+                        <p class="text-xs text-gray-400">Run on: ${new Date(item.timestamp).toLocaleString()} (${item.config.candles}c)</p>
+                        <p class="text-sm text-cyan-400">Sharpe Ratio: ${item.report.sharpeRatio.toFixed(3)} | Win Rate: ${item.report.winRate.toFixed(2)}%</p>
+                        <button class="view-report-btn text-xs text-indigo-400 hover:text-indigo-300" data-report='${JSON.stringify(item)}'>View Full Report</button>
+                    </div>
+                `).join('') : '<p class="text-gray-500">No past backtests found in local storage.</p>';
+
+                document.querySelectorAll('.view-report-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const reportData = JSON.parse(e.target.dataset.report);
+                        showReport(reportData.config, reportData.report);
+                        // Switch back to report view
+                        historyContainer.classList.add('hidden');
+                        reportContainer.classList.remove('hidden');
+                    });
+                });
+                
+                clearHistoryButton.style.display = history.length > 0 ? 'block' : 'none';
+
+            } catch (e) {
+                console.error("Error loading history: ", e);
+                historyListEl.innerHTML = '<p class="text-red-400">Failed to load history.</p>';
+            }
+        }
+
+        function clearHistory() {
+            if (!confirm("Are you sure you want to delete ALL backtest history? This cannot be undone.")) return;
+
+            try {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                console.log("History successfully cleared from localStorage.");
+                loadHistory(); // Reload the list
+            } catch (e) {
+                console.error("Error clearing history:", e);
+            }
+        }
+
+
+        // --- Backtesting Engine and Simulation ---
+
+        function getParams() {
+            const params = {};
+            selectedStrategy.params.forEach(p => {
+                const input = document.getElementById(p.name);
+                params[p.name] = parseFloat(input.value);
+            });
+            return params;
+        }
+
+        // --- Core Strategy Logic ---
+
+        function executeStrategy(data, strategyId, params) {
+            let trades = [];
+            let position = null; // null: flat, {entryPrice, entryIndex}
+            
+            // Loop starts from 1 because indicators need previous data and we need a change point
+            for (let i = 1; i < data.length; i++) {
+                const current = data[i];
+                const prev = data[i - 1];
+                let action = null;
+                
+                if (strategyId === 'LULD') {
+                    const dipPercent = ((prev.close - current.close) / prev.close) * 100;
+
+                    if (!position && dipPercent >= params.dipThreshold) {
+                        // Buy signal (dip threshold reached)
+                        action = { type: 'BUY', price: current.open };
+                    } else if (position) {
+                        const pumpPercent = ((current.close - position.entryPrice) / position.entryPrice) * 100;
+                        if (pumpPercent >= params.pumpThreshold) {
+                            // Sell signal (pump threshold reached)
+                            action = { type: 'SELL', price: current.open };
+                        }
+                    }
+
+                } else if (strategyId === 'SMAC') {
+                    // Requires sma_50 (shortPeriod) and sma_200 (longPeriod)
+                    
+                    const short = current[`sma_${params.shortPeriod}`];
+                    const long = current[`sma_${params.longPeriod}`];
+                    const prevShort = prev[`sma_${params.shortPeriod}`];
+                    const prevLong = prev[`sma_${params.longPeriod}`];
+
+                    // Check for nulls, especially at the start of the data where SMA isn't defined
+                    if (short && long && prevShort && prevLong) {
+                        const buyCondition = prevShort <= prevLong && short > long; // Short crosses above Long
+                        const sellCondition = prevShort >= prevLong && short < long; // Short crosses below Long
+                        
+                        if (!position && buyCondition) {
+                            action = { type: 'BUY', price: current.open };
+                        } else if (position && sellCondition) {
+                            action = { type: 'SELL', price: current.open };
+                        }
+                    }
+                } else if (strategyId === 'RSIBB') {
+                    // Requires rsi_14
+                    const rsi = current.rsi_14;
+
+                    if (!position && rsi < params.oversold) {
+                        // Buy signal (oversold)
+                        action = { type: 'BUY', price: current.open };
+                    } else if (position && rsi > params.overbought) {
+                        // Sell signal (overbought)
+                        action = { type: 'SELL', price: current.open };
+                    }
+                }
+                
+                // --- NEW STRATEGY 4: HFTL (Candle Shape Based) ---
+                else if (strategyId === 'HFTL') {
+                    const candle = prev.candle; // Look at the previous candle's pattern
+                    
+                    // Simple logic using the two common reversal patterns
+                    const isHammer = candle === 'HAMMER' || candle === 'INVERTEDHAMMER';
+                    const isShootingStar = candle === 'SHOOTINGSTAR' || candle === 'HANGINGMAN'; 
+
+                    // Buy condition: Bullish pattern detected on previous candle
+                    if (!position && isHammer) {
+                        action = { type: 'BUY', price: current.open }; 
+                    } 
+                    // Sell condition: Bearish pattern detected on previous candle
+                    else if (position && isShootingStar) {
+                        action = { type: 'SELL', price: current.open };
+                    }
+                }
+                
+                // --- NEW STRATEGY 5: ADX Momentum Breakout ---
+                else if (strategyId === 'ADXMB') {
+                    const adx = current.adx_14;
+                    const dmp = current.dmp_14;
+                    const dmn = current.dmn_14;
+                    
+                    if (adx && dmp && dmn) {
+                        const buyCondition = adx > params.adxThreshold && dmp > dmn;
+                        const sellCondition = dmn > dmp; // Sell/Exit when negative directional movement takes over
+                        
+                        if (!position && buyCondition) {
+                            action = { type: 'BUY', price: current.open };
+                        } else if (position && sellCondition) {
+                            action = { type: 'SELL', price: current.open };
+                        }
+                    }
+                }
+
+                // --- NEW STRATEGY 6: VWAP Reversion ---
+                else if (strategyId === 'VWAPR') {
+                    const vwap = current.vwap;
+                    const atr = current.atr_14;
+                    const close = current.close;
+                    const multiplier = params.atrMultiplier;
+                    
+                    if (vwap && atr && close) {
+                        const buyZone = vwap - (atr * multiplier);
+                        
+                        // Buy condition: Price is significantly below VWAP (Mean Reversion setup)
+                        if (!position && close < buyZone) {
+                            action = { type: 'BUY', price: current.open };
+                        }
+                        // Sell condition: Price has reverted back up to or above VWAP
+                        else if (position && close >= vwap) {
+                            action = { type: 'SELL', price: current.open };
+                        }
+                    }
+                }
+
+
+                if (action && action.type === 'BUY' && !position) {
+                    position = { entryPrice: action.price, entryIndex: i, datetime: current.datetime };
+                } else if (action && action.type === 'SELL' && position) {
+                    const profit = action.price - position.entryPrice;
+                    trades.push({ 
+                        entryPrice: position.entryPrice, 
+                        exitPrice: action.price, 
+                        profit: profit, 
+                        win: profit > 0,
+                        entryDate: position.datetime,
+                        exitDate: current.datetime
+                    });
+                    position = null; // Close position
+                }
+            }
+
+            return trades;
+        }
+
+        // --- Performance Metrics Calculation ---
+
+        function calculateMetrics(data, trades) {
+            const startPrice = data[0].open;
+            const endPrice = data[data.length - 1].close;
+            const buyAndHoldReturn = (endPrice - startPrice) / startPrice; // Percentage return
+
+            if (trades.length === 0) {
+                 return {
+                    totalTrades: 0,
+                    netProfit: 0,
+                    buyAndHoldReturn: buyAndHoldReturn,
+                    strategyReturn: 0,
+                    winRate: 0,
+                    maxDrawdown: 0,
+                    sharpeRatio: 0,
+                    // Placeholder for when no trades occur
+                    summary: "No trades executed based on the current data and parameters."
+                };
+            }
+
+            const totalTrades = trades.length;
+            const winningTrades = trades.filter(t => t.win).length;
+            const netProfit = trades.reduce((sum, t) => sum + t.profit, 0);
+            
+            // NEW METRICS CALCULATION
+            const winningProfits = trades.filter(t => t.win).map(t => t.profit);
+            const losingProfits = trades.filter(t => !t.win).map(t => t.profit);
+            
+            const grossProfit = winningProfits.reduce((sum, p) => sum + p, 0);
+            const grossLoss = losingProfits.reduce((sum, l) => sum + l, 0);
+            
+            const averageWin = winningProfits.length > 0 ? grossProfit / winningProfits.length : 0;
+            const averageLoss = losingProfits.length > 0 ? grossLoss / losingProfits.length : 0;
+
+
+            // Calculate equity curve and max drawdown
+            let cumulativeReturn = 1.0;
+            const cumulativeReturns = [1.0];
+            trades.forEach(t => {
+                const tradeReturn = t.exitPrice / t.entryPrice;
+                cumulativeReturn *= tradeReturn;
+                cumulativeReturns.push(cumulativeReturn);
+            });
+            
+            const strategyReturn = cumulativeReturn - 1.0;
+            
+            let maxDrawdown = 0;
+            let peak = 1.0;
+            cumulativeReturns.forEach(r => {
+                peak = Math.max(peak, r);
+                const drawdown = (peak - r) / peak;
+                maxDrawdown = Math.max(maxDrawdown, drawdown);
+            });
+            
+            // Simplified Sharpe Ratio calculation (assuming risk-free rate = 0 and annualizing is skipped)
+            const tradeReturns = trades.map(t => (t.exitPrice - t.entryPrice) / t.entryPrice);
+            const meanReturn = tradeReturns.reduce((a, b) => a + b, 0) / totalTrades;
+            const stdDev = Math.sqrt(tradeReturns.map(x => Math.pow(x - meanReturn, 2)).reduce((a, b) => a + b) / totalTrades);
+            const sharpeRatio = stdDev !== 0 ? meanReturn / stdDev : 0;
+
+
+            return {
+                totalTrades,
+                winRate: (winningTrades / totalTrades) * 100,
+                netProfit: netProfit,
+                grossProfit: grossProfit,
+                grossLoss: grossLoss,
+                averageWin: averageWin,
+                averageLoss: averageLoss,
+                buyAndHoldReturn,
+                strategyReturn,
+                maxDrawdown,
+                sharpeRatio,
+                summary: trades.length + " trades executed."
+            };
+        }
+
+
+        async function runBacktest() {
+            if (!selectedStrategy) return;
+
+            // Validate candle count
+            const selectedTimeframe = timeframeSelect.value;
+            const tfMeta = TIMEFRAMES.find(t => t.key === selectedTimeframe);
+            let candleCount = parseInt(candleCountInput.value);
+            
+            if (isNaN(candleCount) || candleCount <= 0 || candleCount > tfMeta.maxCandles) {
+                alert(`Please enter a valid candle count between 1 and ${tfMeta.maxCandles} for the ${tfMeta.label} timeframe.`);
+                return;
+            }
+
+            const config = {
+                ticker: tickerSelect.value,
+                timeframe: selectedTimeframe,
+                strategyId: selectedStrategy.id,
+                strategyTitle: selectedStrategy.title,
+                params: getParams(),
+                candles: candleCount // Use the user-defined candle count
+            };
+            
+            setLoading(true);
+            reportContainer.classList.remove('hidden');
+            historyContainer.classList.add('hidden'); // Ensure history view is hidden
+
+            try {
+                // 1. Fetch Data
+                // Use the user-defined candle count in the API URL
+                const apiUrl = `/api/data?ticker=${config.ticker}&timeframe=${config.timeframe}&candles=${config.candles}`;
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || "External API Error");
+                }
+                
+                apiData = data.reverse(); 
+
+                if (apiData.length < candleCount) {
+                    alert(`Warning: Requested ${candleCount} candles but only received ${apiData.length}. Running test on available data.`);
+                }
+                
+                // 2. Execute Strategy
+                const trades = executeStrategy(apiData, config.strategyId, config.params);
+
+                // 3. Calculate Metrics
+                const report = calculateMetrics(apiData, trades);
+                
+                // 4. Save and Render
+                showReport(config, report, trades);
+                saveReport(config, report); 
+
+            } catch (error) {
+                console.error("Backtest Failed:", error);
+                // Temporarily display error in the report container
+                document.getElementById('reportContent').innerHTML = `<p class="text-red-400">Backtest failed: ${error.message}. Please ensure your API key is valid and the server is running.</p>`;
+                document.getElementById('reportTitle').textContent = `Report: Error`;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // --- Report Rendering ---
+
+        function formatPercent(value) {
+            const colorClass = value >= 0 ? 'text-green-400' : 'text-red-400';
+            return `<span class="${colorClass}">${(value * 100).toFixed(2)}%</span>`;
+        }
+        
+        function formatMetric(value, precision = 2) {
+            return parseFloat(value).toFixed(precision);
+        }
+        
+        // Helper function to generate a styled pill (badge)
+        function getPill(text, isPositive, secondary = false) {
+            let bg, text_color;
+            if (isPositive) {
+                bg = secondary ? 'bg-indigo-700' : 'bg-green-700';
+                text_color = secondary ? 'text-indigo-200' : 'text-green-200';
+            } else {
+                bg = secondary ? 'bg-yellow-700' : 'bg-red-700';
+                text_color = secondary ? 'text-yellow-200' : 'text-red-200';
+            }
+            return `<span class="${bg} ${text_color} px-2 py-0.5 rounded-full inline-block text-xs font-bold">${text}</span>`;
+        }
+
+
+        function showReport(config, report, trades = []) {
+            document.getElementById('reportTitle').textContent = `Report: ${config.strategyTitle} on ${config.ticker} (${config.timeframe.toUpperCase()})`;
+            
+            let tradesHtml = '';
+            if (trades.length > 0) {
+                const firstTrade = trades[0];
+                const lastTrade = trades[trades.length - 1];
+
+                tradesHtml = `
+                    <h3 class="text-xl font-semibold border-b border-gray-700 pb-2 mb-3 text-cyan-400">Trade Details</h3>
+                    <div class="text-sm space-y-1 text-gray-300">
+                        <p>First Trade Entry: ${new Date(firstTrade.entryDate).toLocaleDateString()} @ $${formatMetric(firstTrade.entryPrice)}</p>
+                        <p>Last Trade Exit: ${new Date(lastTrade.exitDate).toLocaleDateString()} @ $${formatMetric(lastTrade.exitPrice)}</p>
+                        <p>Total Candles Analyzed: ${config.candles}</p>
+                        <p>Total Trades Executed: ${report.totalTrades}</p>
+                    </div>
+                    <div class="mt-4">
+                        <h4 class="font-medium text-gray-200">Trade Log Summary (All ${report.totalTrades} Trades):</h4>
+                        <ul class="text-xs font-mono text-gray-400 mt-1 max-h-96 overflow-y-auto bg-gray-900 p-2 rounded">
+                            ${trades.map(t => {
+                                // Display ALL trades
+                                const winPill = getPill(t.win ? 'WIN' : 'LOSS', t.win);
+                                const buyPill = getPill('BUY', true, true); // Entry is always BUY (secondary color)
+                                const sellPill = getPill('SELL', false, true); // Exit is always SELL (secondary color)
+                                
+                                return `<li>${winPill} ${buyPill} @ $${formatMetric(t.entryPrice)} | ${sellPill} @ $${formatMetric(t.exitPrice)} (Profit: $${formatMetric(t.profit, 4)})</li>`;
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
+            } else {
+                 tradesHtml = `<p class="text-yellow-400">Strategy executed 0 trades. Try adjusting parameters or changing the timeframe/ticker.</p>`;
+            }
+
+            const content = `
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold border-b border-gray-700 pb-2 text-cyan-400">Performance Summary</h3>
+                        
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Net Strategy Return:</span>
+                            <span class="font-bold">${formatPercent(report.strategyReturn)}</span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Buy & Hold Return:</span>
+                            <span class="font-bold">${formatPercent(report.buyAndHoldReturn)}</span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Win Rate:</span>
+                            <span class="font-bold">${formatMetric(report.winRate)}%</span>
+                        </div>
+                         <!-- NEW METRICS -->
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Gross Profit:</span>
+                            <span class="font-bold text-green-400">$${formatMetric(report.grossProfit, 2)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Gross Loss:</span>
+                            <span class="font-bold text-red-400">$${formatMetric(report.grossLoss, 2)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Avg. Win Amount:</span>
+                            <span class="font-bold text-green-400">$${formatMetric(report.averageWin, 4)}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Avg. Loss Amount:</span>
+                            <span class="font-bold text-red-400">$${formatMetric(report.averageLoss, 4)}</span>
+                        </div>
+                        <!-- END NEW METRICS -->
+                        
+                        <div class="flex justify-between items-center text-lg pt-4 border-t border-gray-700">
+                            <span class="text-gray-400">Max Drawdown:</span>
+                            <span class="font-bold text-red-400">${formatPercent(report.maxDrawdown)}</span>
+                        </div>
+
+                        <div class="flex justify-between items-center text-lg">
+                            <span class="text-gray-400">Sharpe Ratio (Simplified):</span>
+                            <span class="font-bold text-yellow-400">${formatMetric(report.sharpeRatio, 3)}</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        ${tradesHtml}
+                    </div>
+                </div>
+            `;
+            document.getElementById('reportContent').innerHTML = content;
+        }
+
+        // --- Main Execution ---
+
+        window.onload = () => {
+            populateSelectors();
+            populateStrategyList();
+            
+            // Initial selection
+            selectStrategy(STRATEGIES[0].id);
+
+            runTestButton.addEventListener('click', runBacktest);
+            
+            // History View Toggle
+            viewHistoryButton.addEventListener('click', () => {
+                reportContainer.classList.add('hidden');
+                historyContainer.classList.remove('hidden');
+                loadHistory();
+            });
+
+            backToReportButton.addEventListener('click', () => {
+                historyContainer.classList.add('hidden');
+                reportContainer.classList.remove('hidden');
+            });
+            
+            clearHistoryButton.addEventListener('click', clearHistory);
+        };
+    </script>
+</body>
+</html>
