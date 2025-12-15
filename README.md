@@ -19,7 +19,7 @@ Follow these steps to get the showcase running locally:
 
 1. Navigate to your project directory
 2. Install the required packages (Express for the server, node-fetch to query the external API, and dotenv for configuration):  
-   npm install
+   ```npm install```
 
 ### **Step 2: Configure Your API Key**
 
@@ -27,16 +27,16 @@ The application secures your API key in an environment variable file.
 
 1. **Create .env file:** Rename the provided .env.example file to .env in the project root directory.  
 2. **Add Key:** Paste your API key into the file:  
-   \# .env  
-   API\_KEY="dfo\_YOUR\_KEY\_HERE"
-
+   ```# .env  
+    API_KEY="dfo_YOUR_KEY_HERE"
+    ```
    *(**Note:** You can obtain your API key by logging into the Developer Dashboard at [defitheodds.xyz](https://defitheodds.xyz/dashboard) or by registering at [defitheodds.xyz/register](https://defitheodds.xyz/register).)*
 
 ### **Step 3: Run the Application**
 
 Start the Express server:
 
-node server.js
+```node server.js```
 
 ### **Step 4: Access the Chart**
 
