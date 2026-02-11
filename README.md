@@ -1,4 +1,4 @@
-# **DefiTheOdds Showcase App: Strategy Backtesting App **
+# DefiTheOdds Showcase App: Strategy Backtesting App
 
 This is a minimal Node.js and Express application designed to demonstrate how easily developers can integrate the **DefiTheOdds Enriched Crypto Data API** into their projects.
 
@@ -6,22 +6,22 @@ The application fetches crypto price & indicators from the API service (api.defi
 
 ![Image](image.png "Backtest Report")
 
-## **🚀 Setup and Installation**
+## 🚀 Setup and Installation
 
 Follow these steps to get the showcase running locally:
 
-### **Prerequisites**
+### Prerequisites
 
 * Node.js (v14 or higher)  
 * An active API Key from [DefiTheOdds](https://defitheodds.xyz).
 
-### **Step 1: Clone and Install Dependencies**
+### Step 1: Clone and Install Dependencies
 
 1. Navigate to your project directory
 2. Install the required packages (Express for the server, node-fetch to query the external API, and dotenv for configuration):  
    ```npm install```
 
-### **Step 2: Configure Your API Key**
+### Step 2: Configure Your API Key
 
 The application secures your API key in an environment variable file.
 
@@ -32,19 +32,19 @@ The application secures your API key in an environment variable file.
     ```
    *(**Note:** You can obtain your API key by logging into the Developer Dashboard at [defitheodds.xyz](https://defitheodds.xyz/dashboard) or by registering at [defitheodds.xyz/register](https://defitheodds.xyz/register).)*
 
-### **Step 3: Run the Application**
+### Step 3: Run the Application
 
 Start the Express server:
 
 ```node server.js```
 
-### **Step 4: Access the Chart**
+### Step 4: Access the Chart
 
 Open your web browser and navigate to:
 
 http://localhost:3001
 
-### **Step 5: Run Backtest**
+### Step 5: Run Backtest
 
 - Select your desired Crypto Ticker and Timeframe.
 - Set the Candles to Test (e.g., 3000 for a long daily test).
@@ -56,7 +56,7 @@ The report will populate with metrics derived from the simulated trading activit
 
 
 
-## **Project Structure**
+## Project Structure
 
 | File | Description |
 | :---- | :---- |
